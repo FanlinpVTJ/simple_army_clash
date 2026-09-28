@@ -149,7 +149,10 @@ namespace WindowsManager
 
         public void Dispose()
         {
-            GameObject.Destroy(_windowsContainer);
+            if (_windowsContainer != null)
+            {
+                GameObject.Destroy(_windowsContainer.gameObject);
+            }
         }
     }
 }

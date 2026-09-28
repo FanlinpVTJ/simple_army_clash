@@ -31,7 +31,11 @@ namespace PoolsUtility
         public new void Dispose()
         {
             base.Dispose();
-            UnityEngine.Object.Destroy(_transformGroupRoot.gameObject);
+
+            if (_transformGroupRoot != null)
+            {
+                UnityEngine.Object.Destroy(_transformGroupRoot.gameObject);
+            }
         }
     }
 }
