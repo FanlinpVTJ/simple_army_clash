@@ -1,8 +1,9 @@
+using System;
 using System.Collections.Generic;
 
 namespace SimpleArmyClash.Application
 {
-    public sealed class GameStateMachine
+    public sealed class GameStateMachine : IDisposable
     {
         private readonly Dictionary<GamePhaseType, IGameState> _states = new Dictionary<GamePhaseType, IGameState>();
         private readonly BattleReadModel _readModel;
@@ -38,6 +39,13 @@ namespace SimpleArmyClash.Application
 
             _currentState.Exit();
             _hasCurrentState = false;
+        }
+
+        public void Dispose()
+        {
+            _hasCurrentState = false;
+            _currentState = null;
+            _states.Clear();
         }
     }
 }

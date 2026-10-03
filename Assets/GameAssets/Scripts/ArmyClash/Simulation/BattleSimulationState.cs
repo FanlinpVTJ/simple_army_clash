@@ -1,4 +1,7 @@
+using System;
+using Scellecs.Morpeh;
 using SimpleArmyClash.Domain;
+using SimpleArmyClash.Ecs;
 using UnityEngine;
 
 namespace SimpleArmyClash.Simulation
@@ -6,44 +9,42 @@ namespace SimpleArmyClash.Simulation
     public sealed class BattleSimulationState
     {
         private readonly int[] _aliveCounts = new int[2];
-        private readonly bool[] _activeUnits;
+        private Entity[] _attackOrder;
+        private int[] _attackers;
+        private Vector3[] _attackPositions;
+        private Entity[] _deaths;
 
-        public UnitState[] Units { get; }
-        public Vector3[] NextPositions { get; }
-        public int[] AttackOrder { get; }
-        public int[] Attackers { get; }
-        public int[] AttackTargets { get; }
-        public int[] Deaths { get; }
+        public UnitWorld Units { get; }
+        public Entity[] AttackOrder => _attackOrder;
+        public int[] Attackers => _attackers;
+        public Vector3[] AttackPositions => _attackPositions;
+        public Entity[] Deaths => _deaths;
         public int AttackCount { get; private set; }
         public int DeathCount { get; private set; }
         public float ElapsedTime { get; private set; }
         public bool IsComplete { get; private set; }
         public BattleResult Result { get; private set; }
 
-        public BattleSimulationState(UnitState[] units)
+        public BattleSimulationState(UnitWorld units)
         {
             Units = units;
-            NextPositions = new Vector3[units.Length];
-            AttackOrder = new int[units.Length];
-            Attackers = new int[units.Length];
-            AttackTargets = new int[units.Length];
-            Deaths = new int[units.Length];
-            _activeUnits = new bool[units.Length];
-
-            for (int i = 0; i < units.Length; i++)
-            {
-                UnitState unit = units[i];
-                _activeUnits[i] = unit.IsAlive;
-
-                if (unit.IsAlive)
-                {
-                    _aliveCounts[unit.ArmyIndex]++;
-                }
-            }
+            _attackOrder = new Entity[units.UnitCount];
+            _attackers = new int[units.UnitCount];
+            _attackPositions = new Vector3[units.UnitCount];
+            _deaths = new Entity[units.UnitCount];
+            CountArmies();
         }
 
         public void BeginStep(float deltaTime)
         {
+            if (_attackOrder.Length < Units.UnitCount)
+            {
+                Array.Resize(ref _attackOrder, Units.UnitCount);
+                Array.Resize(ref _attackers, Units.UnitCount);
+                Array.Resize(ref _attackPositions, Units.UnitCount);
+                Array.Resize(ref _deaths, Units.UnitCount);
+            }
+
             ElapsedTime += deltaTime;
             AttackCount = 0;
             DeathCount = 0;
@@ -54,29 +55,29 @@ namespace SimpleArmyClash.Simulation
             return _aliveCounts[armyIndex];
         }
 
-        public void RecordAttack(int attackerIdentifier, int targetIdentifier)
+        public void RecordAttack(Entity attacker, Entity target)
         {
-            Attackers[AttackCount] = attackerIdentifier;
-            AttackTargets[AttackCount] = targetIdentifier;
+            _attackers[AttackCount] = Units.Units.Get(attacker).Identifier;
+            _attackPositions[AttackCount] = Units.Positions.Get(target).Value;
             AttackCount++;
         }
 
-        public void RemoveDeadUnits()
+        public void RecordDeath(Entity entity)
         {
-            for (int i = 0; i < Units.Length; i++)
+            _deaths[DeathCount] = entity;
+            DeathCount++;
+        }
+
+        public void CountArmies()
+        {
+            Array.Clear(_aliveCounts, 0, _aliveCounts.Length);
+
+            foreach (Entity entity in Units.LivingUnits)
             {
-                UnitState unit = Units[i];
-
-                if (!_activeUnits[i] || unit.IsAlive)
+                if (Units.Health.Get(entity).Current > 0)
                 {
-                    continue;
+                    _aliveCounts[Units.Units.Get(entity).ArmyIndex]++;
                 }
-
-                _activeUnits[i] = false;
-                _aliveCounts[unit.ArmyIndex]--;
-                Deaths[DeathCount] = unit.Identifier;
-                DeathCount++;
-                unit.SetTarget(UnitState.NO_TARGET);
             }
         }
 

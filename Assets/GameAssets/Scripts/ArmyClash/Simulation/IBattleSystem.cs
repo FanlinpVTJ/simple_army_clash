@@ -1,7 +1,8 @@
+using Scellecs.Morpeh;
+
 namespace SimpleArmyClash.Simulation
 {
-    public interface IBattleSystem
+    public interface IBattleSystem : ISystem
     {
-        void Step(BattleSimulationState state, float deltaTime);
     }
 }

@@ -1,38 +1,36 @@
 using System;
+using Scellecs.Morpeh;
 using SimpleArmyClash.Domain;
+using SimpleArmyClash.Ecs;
+using UnityEngine;
 
 namespace SimpleArmyClash.Simulation
 {
     public sealed class BattleSimulation : IBattleSimulation
     {
-        public event Action<int, int> OnUnitAttacked;
+        public event Action<int, Vector3> OnUnitAttacked;
         public event Action<int> OnUnitDied;
         public event Action<BattleResult> OnCompleted;
 
         private readonly BattleSimulationState _state;
-        private readonly IBattleSystem[] _systems;
+        private bool _disposed;
 
-        public int UnitCount => _state.Units.Length;
+        public UnitWorld Units => _state.Units;
+        public int UnitCount => Units.UnitCount;
         public bool IsComplete => _state.IsComplete;
         public float ElapsedTime => _state.ElapsedTime;
 
-        public BattleSimulation(UnitState[] units, ITargetSelectionStrategy targetSelectionStrategy,
-            BattleSimulationSettings settings)
+        public BattleSimulation(BattleSimulationState state, IBattleSystem[] systems)
         {
-            _state = new BattleSimulationState(units);
-            _systems = new IBattleSystem[]
-            {
-                new TargetSelectionSystem(targetSelectionStrategy),
-                new MovementSystem(settings),
-                new AttackSystem(settings),
-                new DeathCleanupSystem(),
-                new VictorySystem()
-            };
-        }
+            _state = state;
+            SystemsGroup group = Units.World.CreateSystemsGroup();
 
-        public UnitState GetUnit(int index)
-        {
-            return _state.Units[index];
+            for (int i = 0; i < systems.Length; i++)
+            {
+                group.AddSystem(systems[i]);
+            }
+
+            Units.World.AddSystemsGroup(0, group);
         }
 
         public int GetAliveCount(int armyIndex)
@@ -42,32 +40,45 @@ namespace SimpleArmyClash.Simulation
 
         public void Step(float deltaTime)
         {
-            if (_state.IsComplete || deltaTime <= 0f)
+            if (_disposed || _state.IsComplete || deltaTime <= 0f)
             {
                 return;
             }
 
             _state.BeginStep(deltaTime);
+            Units.World.Update(deltaTime);
+            PublishChanges();
+        }
 
-            for (int i = 0; i < _systems.Length; i++)
+        public void Dispose()
+        {
+            if (_disposed)
             {
-                _systems[i].Step(_state, deltaTime);
+                return;
             }
 
-            PublishChanges();
+            _disposed = true;
+            OnUnitAttacked = null;
+            OnUnitDied = null;
+            OnCompleted = null;
+            Units.Dispose();
         }
 
         private void PublishChanges()
         {
             for (int i = 0; i < _state.AttackCount; i++)
             {
-                OnUnitAttacked?.Invoke(_state.Attackers[i], _state.AttackTargets[i]);
+                OnUnitAttacked?.Invoke(_state.Attackers[i], _state.AttackPositions[i]);
             }
 
             for (int i = 0; i < _state.DeathCount; i++)
             {
-                OnUnitDied?.Invoke(_state.Deaths[i]);
+                Entity entity = _state.Deaths[i];
+                OnUnitDied?.Invoke(Units.Units.Get(entity).Identifier);
+                Units.World.RemoveEntity(entity);
             }
+
+            Units.World.Commit();
 
             if (_state.IsComplete)
             {

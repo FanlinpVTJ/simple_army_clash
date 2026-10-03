@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
-using SimpleArmyClash.Domain;
+using Scellecs.Morpeh;
+using SimpleArmyClash.Ecs;
 using SimpleArmyClash.Presentation;
 using SimpleArmyClash.Simulation;
+using UnityEngine;
 
 namespace SimpleArmyClash.Application
 {
@@ -11,9 +13,12 @@ namespace SimpleArmyClash.Application
         public event Action<int> OnUnitSelected = delegate { };
 
         private readonly IUnitViewFactory _factory;
-        private readonly Dictionary<int, IUnitView> _views = new Dictionary<int, IUnitView>();
-        private UnitState[] _units = Array.Empty<UnitState>();
+        private readonly List<IUnitView> _ownedViews = new List<IUnitView>();
+        private UnitWorld _units;
+        private Stash<UnitViewComponent> _views;
+        private SystemsGroup _systems;
         private IBattleSimulation _simulation;
+        private bool _hasWorld;
         private bool _isAttached;
 
         public BattlePresentation(IUnitViewFactory factory)
@@ -21,17 +26,25 @@ namespace SimpleArmyClash.Application
             _factory = factory;
         }
 
-        public void Show(UnitState[] units)
+        public void Show(UnitWorld units)
         {
             Clear();
             _units = units;
+            _views = units.World.GetStash<UnitViewComponent>();
+            _systems = units.World.CreateSystemsGroup();
+            _systems.AddSystem(new UnitViewSystem());
+            _hasWorld = true;
 
-            foreach (UnitState unit in units)
+            foreach (Entity entity in units.LivingUnits)
             {
-                IUnitView view = _factory.Create(unit);
+                IUnitView view = _factory.Create(units.GetSnapshot(entity));
                 view.OnSelected += HandleSelected;
-                _views.Add(unit.Identifier, view);
+                _ownedViews.Add(view);
+                _views.Add(entity).View = view;
             }
+
+            units.World.Commit();
+            _systems.Initialize();
         }
 
         public void Attach(IBattleSimulation simulation)
@@ -45,17 +58,22 @@ namespace SimpleArmyClash.Application
 
         public void Synchronize(float deltaTime)
         {
-            foreach (KeyValuePair<int, IUnitView> entry in _views)
+            if (_hasWorld && !_units.World.IsDisposed)
             {
-                entry.Value.Synchronize(_units[entry.Key], deltaTime);
+                _systems.Update(deltaTime);
             }
         }
 
         public void SetSelected(int identifier)
         {
-            foreach (KeyValuePair<int, IUnitView> entry in _views)
+            if (!_hasWorld)
             {
-                entry.Value.SetSelected(entry.Key == identifier);
+                return;
+            }
+
+            foreach (Entity entity in _units.LivingUnits)
+            {
+                _units.Selection.Get(entity).IsSelected = _units.Units.Get(entity).Identifier == identifier;
             }
         }
 
@@ -63,27 +81,45 @@ namespace SimpleArmyClash.Application
         {
             Detach();
 
-            foreach (KeyValuePair<int, IUnitView> entry in _views)
+            for (int i = 0; i < _ownedViews.Count; i++)
             {
-                entry.Value.OnSelected -= HandleSelected;
-                _factory.Release(entry.Value);
+                IUnitView view = _ownedViews[i];
+                view.OnSelected -= HandleSelected;
+                _factory.Release(view);
             }
 
-            _views.Clear();
-            _units = Array.Empty<UnitState>();
+            _ownedViews.Clear();
+            DetachWorld();
         }
 
         public void Dispose()
         {
             Detach();
 
-            foreach (KeyValuePair<int, IUnitView> entry in _views)
+            for (int i = 0; i < _ownedViews.Count; i++)
             {
-                entry.Value.OnSelected -= HandleSelected;
+                _ownedViews[i].OnSelected -= HandleSelected;
             }
 
-            _views.Clear();
-            _units = Array.Empty<UnitState>();
+            _ownedViews.Clear();
+            DetachWorld();
+        }
+
+        private void DetachWorld()
+        {
+            if (!_hasWorld)
+            {
+                return;
+            }
+
+            if (!_units.World.IsDisposed)
+            {
+                _systems.Dispose();
+                _views.RemoveAll();
+                _units.World.Commit();
+            }
+
+            _hasWorld = false;
         }
 
         private void Detach()
@@ -103,24 +139,37 @@ namespace SimpleArmyClash.Application
             OnUnitSelected(identifier);
         }
 
-        private void HandleAttack(int attackerIdentifier, int targetIdentifier)
+        private void HandleAttack(int attackerIdentifier, Vector3 targetPosition)
         {
-            if (_views.TryGetValue(attackerIdentifier, out IUnitView view))
+            if (!_hasWorld || !_units.Contains(attackerIdentifier))
             {
-                view.PlayAttack(_units[targetIdentifier].Position);
+                return;
+            }
+
+            Entity attacker = _units.GetEntity(attackerIdentifier);
+
+            if (_views.Has(attacker))
+            {
+                ref UnitViewComponent view = ref _views.Get(attacker);
+                view.AttackTarget = targetPosition;
+                view.HasPendingAttack = true;
             }
         }
 
         private void HandleDeath(int identifier)
         {
-            if (!_views.TryGetValue(identifier, out IUnitView view))
+            Entity entity = _units.GetEntity(identifier);
+
+            if (!_views.Has(entity))
             {
                 return;
             }
 
+            IUnitView view = _views.Get(entity).View;
             view.OnSelected -= HandleSelected;
             _factory.Release(view);
-            _views.Remove(identifier);
+            _ownedViews.Remove(view);
+            _views.Remove(entity);
         }
     }
 }

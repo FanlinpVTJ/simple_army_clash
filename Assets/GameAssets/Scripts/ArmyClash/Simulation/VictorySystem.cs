@@ -1,16 +1,26 @@
 namespace SimpleArmyClash.Simulation
 {
-    public sealed class VictorySystem : IBattleSystem
+    public sealed class VictorySystem : BattleSystem
     {
-        public void Step(BattleSimulationState state, float deltaTime)
+        public VictorySystem(BattleSimulationState state) : base(state)
         {
-            if (state.GetAliveCount(0) == 0)
+        }
+
+        public override void OnAwake()
+        {
+        }
+
+        public override void OnUpdate(float deltaTime)
+        {
+            State.CountArmies();
+
+            if (State.GetAliveCount(0) == 0)
             {
-                state.Complete(1);
+                State.Complete(1);
             }
-            else if (state.GetAliveCount(1) == 0)
+            else if (State.GetAliveCount(1) == 0)
             {
-                state.Complete(0);
+                State.Complete(0);
             }
         }
     }

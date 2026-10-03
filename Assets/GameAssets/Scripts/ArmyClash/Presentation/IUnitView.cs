@@ -11,7 +11,7 @@ namespace SimpleArmyClash.Presentation
         int Identifier { get; }
 
         void Configure(UnitState state, Color bodyColor, Color teamColor);
-        void Synchronize(UnitState state, float deltaTime);
+        void Synchronize(Vector3 position, float visualScale);
         void PlayAttack(Vector3 targetPosition);
         void SetSelected(bool selected);
         void ResetForPool();

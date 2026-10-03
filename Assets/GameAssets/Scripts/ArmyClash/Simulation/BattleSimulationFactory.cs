@@ -1,22 +1,30 @@
-using SimpleArmyClash.Domain;
+using SimpleArmyClash.Ecs;
+using Zenject;
 
 namespace SimpleArmyClash.Simulation
 {
     public sealed class BattleSimulationFactory : IBattleSimulationFactory
     {
-        private readonly ITargetSelectionStrategy _targetSelectionStrategy;
-        private readonly BattleSimulationSettings _settings;
+        private readonly IInstantiator _instantiator;
 
-        public BattleSimulationFactory(ITargetSelectionStrategy targetSelectionStrategy,
-            BattleSimulationSettings settings)
+        public BattleSimulationFactory(IInstantiator instantiator)
         {
-            _targetSelectionStrategy = targetSelectionStrategy;
-            _settings = settings;
+            _instantiator = instantiator;
         }
 
-        public IBattleSimulation Create(UnitState[] units)
+        public IBattleSimulation Create(UnitWorld units)
         {
-            BattleSimulation simulation = new BattleSimulation(units, _targetSelectionStrategy, _settings);
+            BattleSimulationState state = new BattleSimulationState(units);
+            object[] arguments = { state };
+            IBattleSystem[] systems =
+            {
+                _instantiator.Instantiate<TargetSelectionSystem>(arguments),
+                _instantiator.Instantiate<MovementSystem>(arguments),
+                _instantiator.Instantiate<AttackSystem>(arguments),
+                _instantiator.Instantiate<DeathCleanupSystem>(arguments),
+                _instantiator.Instantiate<VictorySystem>(arguments)
+            };
+            BattleSimulation simulation = new BattleSimulation(state, systems);
             return simulation;
         }
     }

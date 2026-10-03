@@ -70,7 +70,7 @@ namespace SimpleArmyClash.Infrastructure
         {
             Container.Bind<IArmyGenerator>().To<ArmyGenerator>().AsSingle();
             Container.Bind<IFormationLayout>().To<GridFormationLayout>().AsSingle().WithArguments(_battlefieldOrigin.position);
-            Container.Bind<BattlePreparationService>().AsSingle();
+            Container.BindInterfacesAndSelfTo<BattlePreparationService>().AsSingle();
         }
 
         private void BindSimulation()
@@ -110,6 +110,7 @@ namespace SimpleArmyClash.Infrastructure
             Container.BindExecutionOrder<BattleReadModel>(-100);
             Container.BindExecutionOrder<global::WindowsManager.WindowsManager>(-80);
             Container.BindExecutionOrder<PooledUnitViewFactory>(-60);
+            Container.BindExecutionOrder<BattlePreparationService>(-55);
             Container.BindExecutionOrder<BattleSessionService>(-50);
             Container.BindExecutionOrder<BattlePresentation>(-40);
             Container.BindExecutionOrder<MainMenuViewModel>(-30);

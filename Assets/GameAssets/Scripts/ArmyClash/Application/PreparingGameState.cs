@@ -19,7 +19,7 @@ namespace SimpleArmyClash.Application
         {
             _preparation.Generate();
             _presentation.Show(_preparation.Units);
-            _readModel.SetCounts(_preparation.Units.Length / 2, _preparation.Units.Length / 2);
+            _readModel.SetCounts(_preparation.Units.UnitCount / 2, _preparation.Units.UnitCount / 2);
             _readModel.SetElapsedTime(0f);
         }
 

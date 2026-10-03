@@ -1,9 +1,10 @@
-using SimpleArmyClash.Domain;
+using Scellecs.Morpeh;
+using SimpleArmyClash.Ecs;
 
 namespace SimpleArmyClash.Simulation
 {
     public interface ITargetSelectionStrategy
     {
-        int SelectTarget(UnitState unit, UnitState[] units);
+        Entity SelectTarget(Entity unit, UnitWorld world, out bool hasTarget);
     }
 }

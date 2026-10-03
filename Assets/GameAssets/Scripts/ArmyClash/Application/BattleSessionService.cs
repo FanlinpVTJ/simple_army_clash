@@ -1,5 +1,6 @@
 using System;
 using SimpleArmyClash.Domain;
+using SimpleArmyClash.Ecs;
 using SimpleArmyClash.Simulation;
 
 namespace SimpleArmyClash.Application
@@ -8,23 +9,21 @@ namespace SimpleArmyClash.Application
     {
         private readonly IBattleSimulationFactory _factory;
         private IBattleSimulation _simulation;
-        private UnitState[] _units = Array.Empty<UnitState>();
 
         public bool HasSession { get; private set; }
         public bool HasResult { get; private set; }
         public BattleResult Result { get; private set; }
         public IBattleSimulation Simulation => _simulation;
-        public UnitState[] Units => _units;
+        public UnitWorld Units => _simulation.Units;
 
         public BattleSessionService(IBattleSimulationFactory factory)
         {
             _factory = factory;
         }
 
-        public void Start(UnitState[] units)
+        public void Start(UnitWorld units)
         {
             Stop();
-            _units = units;
             _simulation = _factory.Create(units);
             _simulation.OnCompleted += HandleCompleted;
             HasSession = true;
@@ -39,8 +38,9 @@ namespace SimpleArmyClash.Application
             }
 
             _simulation.OnCompleted -= HandleCompleted;
-            _units = Array.Empty<UnitState>();
+            _simulation.Dispose();
             HasSession = false;
+            HasResult = false;
         }
 
         public void Dispose()

@@ -1,102 +1,110 @@
+using Scellecs.Morpeh;
 using SimpleArmyClash.Domain;
+using SimpleArmyClash.Ecs;
 using UnityEngine;
 
 namespace SimpleArmyClash.Simulation
 {
-    public sealed class AttackSystem : IBattleSystem
+    public sealed class AttackSystem : BattleSystem
     {
         private const float TIME_TOLERANCE = 0.0001f;
-
         private readonly BattleSimulationSettings _settings;
+        private Filter _filter;
 
-        public AttackSystem(BattleSimulationSettings settings)
+        public AttackSystem(BattleSimulationState state, BattleSimulationSettings settings) : base(state)
         {
             _settings = settings;
         }
 
-        public void Step(BattleSimulationState state, float deltaTime)
+        public override void OnAwake()
         {
-            int readyCount = PrepareAttackOrder(state);
+            _filter = World.Filter.With<AliveComponent>().With<UnitComponent>().With<AttackComponent>()
+                .With<TargetComponent>().With<HealthComponent>().With<PositionComponent>().Build();
+        }
+
+        public override void OnUpdate(float deltaTime)
+        {
+            int readyCount = PrepareAttackOrder();
 
             for (int i = 0; i < readyCount; i++)
             {
-                UnitState attacker = state.Units[state.AttackOrder[i]];
+                Entity attacker = State.AttackOrder[i];
 
-                if (!CanAttack(attacker, state))
+                if (!CanAttack(attacker))
                 {
                     continue;
                 }
 
-                UnitState target = state.Units[attacker.TargetIdentifier];
-                target.ReceiveDamage(attacker.Definition.Statistics.AttackDamage);
-                attacker.ScheduleAttack(state.ElapsedTime + attacker.Definition.Statistics.AttackInterval);
-                state.RecordAttack(attacker.Identifier, target.Identifier);
+                Entity target = Units.Targets.Get(attacker).Entity;
+                ref AttackComponent attack = ref Units.Attacks.Get(attacker);
+                ref HealthComponent health = ref Units.Health.Get(target);
+                health.Current = Mathf.Max(0, health.Current - attack.Damage);
+                attack.ReadyAt = State.ElapsedTime + attack.Interval;
+                State.RecordAttack(attacker, target);
             }
         }
 
-        private int PrepareAttackOrder(BattleSimulationState state)
+        private int PrepareAttackOrder()
         {
             int readyCount = 0;
 
-            for (int i = 0; i < state.Units.Length; i++)
+            foreach (Entity attacker in _filter)
             {
-                UnitState attacker = state.Units[i];
-
-                if (!CanAttack(attacker, state))
+                if (!CanAttack(attacker))
                 {
                     continue;
                 }
 
                 int insertIndex = readyCount;
 
-                while (insertIndex > 0 && HasEarlierAttack(attacker, state.Units[state.AttackOrder[insertIndex - 1]]))
+                while (insertIndex > 0 && HasEarlierAttack(attacker, State.AttackOrder[insertIndex - 1]))
                 {
-                    state.AttackOrder[insertIndex] = state.AttackOrder[insertIndex - 1];
+                    State.AttackOrder[insertIndex] = State.AttackOrder[insertIndex - 1];
                     insertIndex--;
                 }
 
-                state.AttackOrder[insertIndex] = i;
+                State.AttackOrder[insertIndex] = attacker;
                 readyCount++;
             }
 
             return readyCount;
         }
 
-        private bool CanAttack(UnitState attacker, BattleSimulationState state)
+        private bool CanAttack(Entity attacker)
         {
-            if (!attacker.IsAlive || attacker.TargetIdentifier == UnitState.NO_TARGET ||
-                attacker.NextAttackTime > state.ElapsedTime + TIME_TOLERANCE)
+            ref TargetComponent target = ref Units.Targets.Get(attacker);
+
+            if (!Units.IsAlive(attacker) || !target.HasTarget || !Units.IsAlive(target.Entity)
+                || Units.Attacks.Get(attacker).ReadyAt > State.ElapsedTime + TIME_TOLERANCE)
             {
                 return false;
             }
 
-            UnitState target = state.Units[attacker.TargetIdentifier];
-
-            if (!target.IsAlive)
-            {
-                return false;
-            }
-
-            Vector3 offset = target.Position - attacker.Position;
+            ref PositionComponent position = ref Units.Positions.Get(attacker);
+            ref PositionComponent targetPosition = ref Units.Positions.Get(target.Entity);
+            Vector3 offset = targetPosition.Value - position.Value;
             offset.y = 0f;
-            float attackDistance = attacker.Definition.Radius + target.Definition.Radius +
-                _settings.MeleeReach + MovementSystem.CONTACT_TOLERANCE;
+            float attackDistance = position.Radius + targetPosition.Radius
+                + _settings.MeleeReach + MovementSystem.CONTACT_TOLERANCE;
             return offset.sqrMagnitude <= attackDistance * attackDistance;
         }
 
-        private bool HasEarlierAttack(UnitState attacker, UnitState other)
+        private bool HasEarlierAttack(Entity attacker, Entity other)
         {
-            if (attacker.NextAttackTime < other.NextAttackTime)
+            ref AttackComponent attack = ref Units.Attacks.Get(attacker);
+            ref AttackComponent otherAttack = ref Units.Attacks.Get(other);
+
+            if (attack.ReadyAt < otherAttack.ReadyAt)
             {
                 return true;
             }
 
-            if (attacker.NextAttackTime > other.NextAttackTime)
+            if (attack.ReadyAt > otherAttack.ReadyAt)
             {
                 return false;
             }
 
-            return attacker.AttackPriority < other.AttackPriority;
+            return attack.Priority < otherAttack.Priority;
         }
     }
 }

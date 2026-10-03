@@ -1,19 +1,22 @@
 using System;
+using Scellecs.Morpeh;
 using SimpleArmyClash.Configuration;
 using SimpleArmyClash.Domain;
+using SimpleArmyClash.Ecs;
 using UnityEngine;
 
 namespace SimpleArmyClash.Application
 {
-    public sealed class BattlePreparationService
+    public sealed class BattlePreparationService : IDisposable
     {
         private readonly BattleConfiguration _configuration;
         private readonly IArmyGenerator _generator;
         private readonly IFormationLayout _formation;
         private readonly IRandomSource _random;
-        private UnitState[] _units = Array.Empty<UnitState>();
+        private UnitWorld _units;
+        private bool _hasWorld;
 
-        public UnitState[] Units => _units;
+        public UnitWorld Units => _units;
 
         public BattlePreparationService(BattleConfiguration configuration, IArmyGenerator generator,
             IFormationLayout formation, IRandomSource random)
@@ -26,7 +29,12 @@ namespace SimpleArmyClash.Application
 
         public void Generate()
         {
-            _units = new UnitState[_configuration.ArmySize * 2];
+            Dispose();
+            _units = new UnitWorld(_configuration.ArmySize * 2);
+            _hasWorld = true;
+            SystemsGroup group = _units.World.CreateSystemsGroup();
+            group.AddSystem(new FormationSwapSystem());
+            _units.World.AddSystemsGroup(0, group);
 
             for (int armyIndex = 0; armyIndex < 2; armyIndex++)
             {
@@ -34,38 +42,39 @@ namespace SimpleArmyClash.Application
 
                 for (int slotIndex = 0; slotIndex < army.Length; slotIndex++)
                 {
-                    int identifier = armyIndex * _configuration.ArmySize + slotIndex;
+                    int priority = armyIndex * _configuration.ArmySize + slotIndex;
                     Vector3 position = _formation.GetPosition(armyIndex, slotIndex);
-                    _units[identifier] = new UnitState(identifier, armyIndex, army[slotIndex], position, identifier);
+                    _units.Spawn(armyIndex, army[slotIndex], position, priority);
                 }
             }
+
+            _units.World.Commit();
         }
 
         public bool TrySwap(int firstIdentifier, int secondIdentifier)
         {
-            if (firstIdentifier < 0 || firstIdentifier >= _units.Length
-                || secondIdentifier < 0 || secondIdentifier >= _units.Length)
+            if (!_hasWorld || !_units.Contains(firstIdentifier) || !_units.Contains(secondIdentifier))
             {
                 return false;
             }
 
-            UnitState first = _units[firstIdentifier];
-            UnitState second = _units[secondIdentifier];
+            Entity first = _units.GetEntity(firstIdentifier);
+            Entity second = _units.GetEntity(secondIdentifier);
 
-            if (first.ArmyIndex != second.ArmyIndex)
+            if (_units.Units.Get(first).ArmyIndex != _units.Units.Get(second).ArmyIndex)
             {
                 return false;
             }
 
-            Vector3 firstPosition = first.Position;
-            first.SetPosition(second.Position);
-            second.SetPosition(firstPosition);
+            ref FormationSwapRequest request = ref _units.World.GetStash<FormationSwapRequest>().Add(first);
+            request.Other = second;
+            _units.World.Update(0f);
             return true;
         }
 
-        public UnitState[] CreateBattleUnits()
+        public UnitWorld CreateBattleUnits()
         {
-            int[] priorities = new int[_units.Length];
+            int[] priorities = new int[_units.UnitCount];
 
             for (int i = 0; i < priorities.Length; i++)
             {
@@ -80,15 +89,28 @@ namespace SimpleArmyClash.Application
                 priorities[selectedIndex] = previousPriority;
             }
 
-            UnitState[] result = new UnitState[_units.Length];
+            UnitWorld result = new UnitWorld(_units.UnitCount);
 
-            for (int i = 0; i < _units.Length; i++)
+            for (int i = 0; i < _units.UnitCount; i++)
             {
-                UnitState unit = _units[i];
-                result[i] = new UnitState(unit.Identifier, unit.ArmyIndex, unit.Definition, unit.Position, priorities[i]);
+                Entity entity = _units.GetEntity(i);
+                ref UnitComponent unit = ref _units.Units.Get(entity);
+                result.Spawn(unit.ArmyIndex, unit.Definition, _units.Positions.Get(entity).Value, priorities[i]);
             }
 
+            result.World.Commit();
             return result;
+        }
+
+        public void Dispose()
+        {
+            if (!_hasWorld)
+            {
+                return;
+            }
+
+            _units.Dispose();
+            _hasWorld = false;
         }
     }
 }

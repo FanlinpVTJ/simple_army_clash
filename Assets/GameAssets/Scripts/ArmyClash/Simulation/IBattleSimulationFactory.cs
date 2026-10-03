@@ -1,9 +1,9 @@
-using SimpleArmyClash.Domain;
+using SimpleArmyClash.Ecs;
 
 namespace SimpleArmyClash.Simulation
 {
     public interface IBattleSimulationFactory
     {
-        IBattleSimulation Create(UnitState[] units);
+        IBattleSimulation Create(UnitWorld units);
     }
 }

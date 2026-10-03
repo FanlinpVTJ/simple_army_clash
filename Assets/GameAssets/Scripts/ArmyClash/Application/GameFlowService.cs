@@ -49,7 +49,7 @@ namespace SimpleArmyClash.Application
         public void SelectUnit(int unitIdentifier)
         {
             if (_readModel.Phase.CurrentValue != GamePhaseType.Preparing
-                || unitIdentifier < 0 || unitIdentifier >= _preparation.Units.Length)
+                || !_preparation.Units.Contains(unitIdentifier))
             {
                 return;
             }
@@ -87,7 +87,7 @@ namespace SimpleArmyClash.Application
         {
             _presentation.OnUnitSelected -= SelectUnit;
             _presentation.Dispose();
-            _stateMachine.Stop();
+            _stateMachine.Dispose();
         }
 
         private void UpdateSelection(int identifier)

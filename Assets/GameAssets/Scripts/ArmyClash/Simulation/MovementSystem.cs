@@ -1,88 +1,97 @@
+using Scellecs.Morpeh;
 using SimpleArmyClash.Domain;
+using SimpleArmyClash.Ecs;
 using UnityEngine;
 
 namespace SimpleArmyClash.Simulation
 {
-    public sealed class MovementSystem : IBattleSystem
+    public sealed class MovementSystem : BattleSystem
     {
         public const float CONTACT_TOLERANCE = 0.002f;
 
         private const float DIRECTION_TOLERANCE = 0.0001f;
-
         private readonly BattleSimulationSettings _settings;
+        private Filter _filter;
 
-        public MovementSystem(BattleSimulationSettings settings)
+        public MovementSystem(BattleSimulationState state, BattleSimulationSettings settings) : base(state)
         {
             _settings = settings;
         }
 
-        public void Step(BattleSimulationState state, float deltaTime)
+        public override void OnAwake()
         {
-            for (int i = 0; i < state.Units.Length; i++)
+            _filter = World.Filter.With<AliveComponent>().With<PositionComponent>().With<MovementComponent>()
+                .With<TargetComponent>().With<HealthComponent>().With<AttackComponent>().Build();
+        }
+
+        public override void OnUpdate(float deltaTime)
+        {
+            foreach (Entity entity in _filter)
             {
-                state.NextPositions[i] = CalculatePosition(state.Units[i], state.Units, deltaTime);
+                Units.Movement.Get(entity).NextPosition = CalculatePosition(entity, deltaTime);
             }
 
-            for (int i = 0; i < state.Units.Length; i++)
+            foreach (Entity entity in _filter)
             {
-                state.Units[i].SetPosition(state.NextPositions[i]);
+                Units.Positions.Get(entity).Value = Units.Movement.Get(entity).NextPosition;
             }
         }
 
-        private Vector3 CalculatePosition(UnitState unit, UnitState[] units, float deltaTime)
+        private Vector3 CalculatePosition(Entity entity, float deltaTime)
         {
-            if (!unit.IsAlive || unit.TargetIdentifier == UnitState.NO_TARGET)
+            ref PositionComponent position = ref Units.Positions.Get(entity);
+            ref TargetComponent target = ref Units.Targets.Get(entity);
+
+            if (Units.Health.Get(entity).Current <= 0 || !target.HasTarget || !Units.IsAlive(target.Entity))
             {
-                return unit.Position;
+                return position.Value;
             }
 
-            UnitState target = units[unit.TargetIdentifier];
-            Vector3 offset = target.Position - unit.Position;
+            ref PositionComponent targetPosition = ref Units.Positions.Get(target.Entity);
+            Vector3 offset = targetPosition.Value - position.Value;
             offset.y = 0f;
             float distance = offset.magnitude;
-            float contactDistance = unit.Definition.Radius + target.Definition.Radius + _settings.MeleeReach;
+            float contactDistance = position.Radius + targetPosition.Radius + _settings.MeleeReach;
 
             if (distance <= contactDistance + CONTACT_TOLERANCE)
             {
-                return unit.Position;
+                return position.Value;
             }
 
             Vector3 direction = offset / distance;
             Vector3 tangent = new Vector3(-direction.z, 0f, direction.x);
-            float separation = CalculateSeparation(unit, units, tangent);
+            float separation = CalculateSeparation(entity, target.Entity, tangent);
             Vector3 movementDirection = (direction + tangent * separation * _settings.SeparationStrength).normalized;
             float remainingDistance = distance - contactDistance;
-            float maximumMovement = unit.Definition.Statistics.MovementSpeed * deltaTime;
+            float speed = Units.Movement.Get(entity).Speed;
+            ref TargetComponent opponentTarget = ref Units.Targets.Get(target.Entity);
 
-            if (target.TargetIdentifier == unit.Identifier)
+            if (opponentTarget.HasTarget && opponentTarget.Entity == entity)
             {
-                float combinedSpeed = unit.Definition.Statistics.MovementSpeed +
-                    target.Definition.Statistics.MovementSpeed;
-                remainingDistance *= unit.Definition.Statistics.MovementSpeed / combinedSpeed;
+                float combinedSpeed = speed + Units.Movement.Get(target.Entity).Speed;
+                remainingDistance *= speed / combinedSpeed;
             }
 
-            float movementDistance = Mathf.Min(maximumMovement, remainingDistance);
-            Vector3 position = unit.Position + movementDirection * movementDistance;
-            return position;
+            float movementDistance = Mathf.Min(speed * deltaTime, remainingDistance);
+            return position.Value + movementDirection * movementDistance;
         }
 
-        private float CalculateSeparation(UnitState unit, UnitState[] units, Vector3 tangent)
+        private float CalculateSeparation(Entity entity, Entity target, Vector3 tangent)
         {
             float separation = 0f;
+            ref PositionComponent position = ref Units.Positions.Get(entity);
 
-            for (int i = 0; i < units.Length; i++)
+            foreach (Entity neighbor in _filter)
             {
-                UnitState neighbor = units[i];
-
-                if (!neighbor.IsAlive || neighbor.Identifier == unit.Identifier ||
-                    neighbor.Identifier == unit.TargetIdentifier)
+                if (neighbor == entity || neighbor == target || Units.Health.Get(neighbor).Current <= 0)
                 {
                     continue;
                 }
 
-                Vector3 offset = unit.Position - neighbor.Position;
+                ref PositionComponent neighborPosition = ref Units.Positions.Get(neighbor);
+                Vector3 offset = position.Value - neighborPosition.Value;
                 offset.y = 0f;
-                float minimumDistance = unit.Definition.Radius + neighbor.Definition.Radius + _settings.MeleeReach;
+                float minimumDistance = position.Radius + neighborPosition.Radius + _settings.MeleeReach;
                 float squaredDistance = offset.sqrMagnitude;
 
                 if (squaredDistance >= minimumDistance * minimumDistance)
@@ -95,7 +104,7 @@ namespace SimpleArmyClash.Simulation
 
                 if (Mathf.Abs(lateralDistance) < DIRECTION_TOLERANCE)
                 {
-                    side = unit.AttackPriority < neighbor.AttackPriority ? -1f : 1f;
+                    side = Units.Attacks.Get(entity).Priority < Units.Attacks.Get(neighbor).Priority ? -1f : 1f;
                 }
 
                 separation += side * (1f - Mathf.Sqrt(squaredDistance) / minimumDistance);

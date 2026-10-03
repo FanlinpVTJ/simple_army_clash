@@ -1,37 +1,44 @@
-using SimpleArmyClash.Domain;
+using Scellecs.Morpeh;
+using SimpleArmyClash.Ecs;
 using UnityEngine;
 
 namespace SimpleArmyClash.Simulation
 {
     public sealed class NearestEnemyTargetSelectionStrategy : ITargetSelectionStrategy
     {
-        public int SelectTarget(UnitState unit, UnitState[] units)
+        public Entity SelectTarget(Entity unit, UnitWorld world, out bool hasTarget)
         {
-            int nearestIdentifier = UnitState.NO_TARGET;
+            Entity nearest = default;
+            int nearestIdentifier = int.MaxValue;
             float nearestSquaredDistance = float.PositiveInfinity;
+            int armyIndex = world.Units.Get(unit).ArmyIndex;
+            Vector3 position = world.Positions.Get(unit).Value;
+            hasTarget = false;
 
-            for (int i = 0; i < units.Length; i++)
+            foreach (Entity candidate in world.LivingUnits)
             {
-                UnitState candidate = units[i];
+                ref UnitComponent other = ref world.Units.Get(candidate);
 
-                if (!candidate.IsAlive || candidate.ArmyIndex == unit.ArmyIndex)
+                if (world.Health.Get(candidate).Current <= 0 || other.ArmyIndex == armyIndex)
                 {
                     continue;
                 }
 
-                Vector3 offset = candidate.Position - unit.Position;
+                Vector3 offset = world.Positions.Get(candidate).Value - position;
                 offset.y = 0f;
                 float squaredDistance = offset.sqrMagnitude;
 
-                if (squaredDistance < nearestSquaredDistance ||
-                    squaredDistance == nearestSquaredDistance && candidate.Identifier < nearestIdentifier)
+                if (squaredDistance < nearestSquaredDistance
+                    || squaredDistance == nearestSquaredDistance && other.Identifier < nearestIdentifier)
                 {
-                    nearestIdentifier = candidate.Identifier;
+                    nearest = candidate;
+                    nearestIdentifier = other.Identifier;
                     nearestSquaredDistance = squaredDistance;
+                    hasTarget = true;
                 }
             }
 
-            return nearestIdentifier;
+            return nearest;
         }
     }
 }
