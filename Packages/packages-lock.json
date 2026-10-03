@@ -1,5 +1,14 @@
 {
   "dependencies": {
+    "com.codewriter.triinspector": {
+      "version": "https://github.com/codewriter-packages/Tri-Inspector.git#1.15.1",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {
+        "com.unity.localization": "1.0.0"
+      },
+      "hash": "f4a666ed48792ed3d850edd22d4ccca57aae0b9d"
+    },
     "com.cysharp.messagepipe": {
       "version": "https://github.com/Cysharp/MessagePipe.git?path=src/MessagePipe.Unity/Assets/Plugins/MessagePipe",
       "depth": 0,
@@ -43,6 +52,13 @@
       "source": "git",
       "dependencies": {},
       "hash": "73d2383899210da808a1b27329cdaa8000de557b"
+    },
+    "com.scellecs.morpeh": {
+      "version": "https://github.com/scellecs/morpeh.git?path=Scellecs.Morpeh#2024.1.1",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "9f6369384792a01d74df24efd35b08ae313e4f12"
     },
     "com.unity.2d.sprite": {
       "version": "1.0.0",
@@ -134,6 +150,16 @@
       "source": "registry",
       "dependencies": {
         "com.unity.modules.uielements": "1.0.0"
+      },
+      "url": "https://packages.unity.com"
+    },
+    "com.unity.localization": {
+      "version": "1.5.5",
+      "depth": 1,
+      "source": "registry",
+      "dependencies": {
+        "com.unity.addressables": "1.25.0",
+        "com.unity.nuget.newtonsoft-json": "3.0.2"
       },
       "url": "https://packages.unity.com"
     },
