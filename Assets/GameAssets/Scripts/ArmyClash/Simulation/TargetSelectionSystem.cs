@@ -31,7 +31,7 @@ namespace SimpleArmyClash.Simulation
                     continue;
                 }
 
-                target.Entity = _strategy.SelectTarget(entity, Units, out bool hasTarget);
+                target.Entity = _strategy.SelectTarget(entity, Units, State.SpatialIndex, out bool hasTarget);
                 target.HasTarget = hasTarget;
             }
         }

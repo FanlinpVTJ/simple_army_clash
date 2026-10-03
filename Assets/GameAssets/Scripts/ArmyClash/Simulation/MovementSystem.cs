@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Scellecs.Morpeh;
 using SimpleArmyClash.Domain;
 using SimpleArmyClash.Ecs;
@@ -11,11 +12,13 @@ namespace SimpleArmyClash.Simulation
 
         private const float DIRECTION_TOLERANCE = 0.0001f;
         private readonly BattleSimulationSettings _settings;
+        private readonly List<Entity> _neighbors;
         private Filter _filter;
 
         public MovementSystem(BattleSimulationState state, BattleSimulationSettings settings) : base(state)
         {
             _settings = settings;
+            _neighbors = new List<Entity>(state.Units.UnitCount);
         }
 
         public override void OnAwake()
@@ -26,6 +29,11 @@ namespace SimpleArmyClash.Simulation
 
         public override void OnUpdate(float deltaTime)
         {
+            if (_neighbors.Capacity < Units.UnitCount)
+            {
+                _neighbors.Capacity = Units.UnitCount;
+            }
+
             foreach (Entity entity in _filter)
             {
                 Units.Movement.Get(entity).NextPosition = CalculatePosition(entity, deltaTime);
@@ -81,8 +89,13 @@ namespace SimpleArmyClash.Simulation
             float separation = 0f;
             ref PositionComponent position = ref Units.Positions.Get(entity);
 
-            foreach (Entity neighbor in _filter)
+            float searchRadius = position.Radius + State.SpatialIndex.MaximumRadius + _settings.MeleeReach;
+            State.SpatialIndex.CollectNeighbors(position.Value, searchRadius, _neighbors);
+
+            for (int i = 0; i < _neighbors.Count; i++)
             {
+                Entity neighbor = _neighbors[i];
+
                 if (neighbor == entity || neighbor == target || Units.Health.Get(neighbor).Current <= 0)
                 {
                     continue;

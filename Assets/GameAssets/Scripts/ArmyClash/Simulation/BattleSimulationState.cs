@@ -15,6 +15,7 @@ namespace SimpleArmyClash.Simulation
         private Entity[] _deaths;
 
         public UnitWorld Units { get; }
+        public IUnitSpatialIndex SpatialIndex { get; }
         public Entity[] AttackOrder => _attackOrder;
         public int[] Attackers => _attackers;
         public Vector3[] AttackPositions => _attackPositions;
@@ -25,9 +26,10 @@ namespace SimpleArmyClash.Simulation
         public bool IsComplete { get; private set; }
         public BattleResult Result { get; private set; }
 
-        public BattleSimulationState(UnitWorld units)
+        public BattleSimulationState(UnitWorld units, IUnitSpatialIndex spatialIndex)
         {
             Units = units;
+            SpatialIndex = spatialIndex;
             _attackOrder = new Entity[units.UnitCount];
             _attackers = new int[units.UnitCount];
             _attackPositions = new Vector3[units.UnitCount];

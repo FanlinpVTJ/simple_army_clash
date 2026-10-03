@@ -5,6 +5,6 @@ namespace SimpleArmyClash.Simulation
 {
     public interface ITargetSelectionStrategy
     {
-        Entity SelectTarget(Entity unit, UnitWorld world, out bool hasTarget);
+        Entity SelectTarget(Entity unit, UnitWorld world, IUnitSpatialIndex spatialIndex, out bool hasTarget);
     }
 }
